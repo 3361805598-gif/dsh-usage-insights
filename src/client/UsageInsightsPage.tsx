@@ -7,23 +7,23 @@ const integer = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFra
 const exact = new Intl.NumberFormat('zh-CN')
 const rangeLabels: Record<UsageRange, string> = { '1d': '1 天', '7d': '7 天', '30d': '30 天' }
 
-function heatColor(total: number, max: number): string {
-  if (!total || !max) return '#edf1ed'
+function heatLevel(total: number, max: number): 0 | 1 | 2 | 3 | 4 {
+  if (!total || !max) return 0
   const ratio = total / max
-  return ratio < .18 ? '#dceddf' : ratio < .42 ? '#add5ba' : ratio < .7 ? '#66b584' : '#237a50'
+  return ratio < .18 ? 1 : ratio < .42 ? 2 : ratio < .7 ? 3 : 4
 }
 
 function Heatmap({ cells, range }: { cells: HeatmapCell[]; range: UsageRange }): JSX.Element {
   const max = Math.max(...cells.map((cell) => cell.total), 0)
   return <>
-    <div className={`ui-heat ${range === '1d' ? 'one' : range === '7d' ? 'seven' : 'thirty'}`}>
-      {cells.map((cell) => <div key={cell.key} className="ui-cell" style={{ background: heatColor(cell.total, max) }} title={`${cell.label}：${exact.format(cell.total)} Token${cell.unknownAttempts ? `；${cell.unknownAttempts} 次缺少用量` : ''}`} />)}
+    <div className={`dshi-heat ${range === '1d' ? 'one' : range === '7d' ? 'seven' : 'thirty'}`}>
+      {cells.map((cell) => <div key={cell.key} className={`dshi-cell l${heatLevel(cell.total, max)}`} title={`${cell.label}：${exact.format(cell.total)} Token${cell.unknownAttempts ? `；${cell.unknownAttempts} 次缺少用量` : ''}`} />)}
     </div>
-    <div className="ui-legend"><span>少</span><i className="ui-swatch" /><i className="ui-swatch" /><i className="ui-swatch" /><i className="ui-swatch" /><span>多</span></div>
+    <div className="dshi-legend"><span>少</span><i className="dshi-swatch" /><i className="dshi-swatch" /><i className="dshi-swatch" /><i className="dshi-swatch" /><span>多</span></div>
   </>
 }
 
-function card(value: string, label: string): JSX.Element { return <div className="ui-card"><span>{label}</span><b>{value}</b></div> }
+function card(value: string, label: string): JSX.Element { return <div className="dshi-card"><span>{label}</span><b>{value}</b></div> }
 
 export function UsageInsightsPage(): JSX.Element {
   ensureUsageInsightsStyles()
@@ -45,17 +45,17 @@ export function UsageInsightsPage(): JSX.Element {
     if (!window.confirm('将删除本插件的派生统计缓存，并从原始 DSH 会话重新索引。不会删除任何会话。是否继续？')) return
     setRebuilding(true); try { await rebuildIndex(); await load() } catch (cause) { setError(cause instanceof Error ? cause.message : '无法启动重建') } finally { setRebuilding(false) }
   }
-  if (!data && !error) return <main className="ui-page"><div className="ui-loading">正在准备本地使用分析…</div></main>
-  if (error && !data) return <main className="ui-page"><section className="ui-panel ui-error"><h2>无法载入个人分析</h2><p>{error}</p><button className="ui-rebuild" onClick={() => void load()}>重试</button></section></main>
+  if (!data && !error) return <main className="dshi-page"><div className="dshi-loading">正在准备本地使用分析…</div></main>
+  if (error && !data) return <main className="dshi-page"><section className="dshi-panel dshi-error"><h2>无法载入个人分析</h2><p>{error}</p><button className="dshi-rebuild" onClick={() => void load()}>重试</button></section></main>
   const value = data!
-  return <main className="ui-page">
-    <div className="ui-top"><div><h1>个人分析</h1><p className="ui-muted">本机 DSH 活动 · 仅统计可验证的 Token 用量</p></div><div className="ui-profile" aria-label="个人分析">◒</div></div>
-    <div className="ui-toolbar"><div className="ui-ranges">{(Object.keys(rangeLabels) as UsageRange[]).map((key) => <button key={key} aria-pressed={range === key} onClick={() => setRange(key)}>{rangeLabels[key]}</button>)}</div><button className="ui-rebuild" disabled={rebuilding} onClick={() => void rebuild()}>{rebuilding ? '正在重建…' : '重建统计缓存'}</button></div>
-    {error && <p className="ui-muted">{error}</p>}
-    <section className="ui-cards">{card(integer.format(value.totals.total), '总 Token')}{card(exact.format(value.totals.modelCalls), '模型调用')}{card(exact.format(value.totals.skillCalls), '技能调用')}{card(exact.format(value.totals.activeDays), '活跃天数')}</section>
-    <section className="ui-panel"><div className="ui-panel-head"><div><h2>Token 使用热力图</h2><p className="ui-muted">按本机时区 {value.timeZone} 归类</p></div><span className="ui-status">{status}</span></div><Heatmap cells={value.heatmap} range={range} /><div className="ui-breakdown"><div><span>输入</span><b>{integer.format(value.totals.input)}</b></div><div><span>输出</span><b>{integer.format(value.totals.output)}</b></div><div><span>缓存读取</span><b>{integer.format(value.totals.cacheRead)}</b></div><div><span>缓存写入</span><b>{integer.format(value.totals.cacheWrite)}</b></div><div><span>推理（输出子集）</span><b>{integer.format(value.totals.reasoning)}</b></div></div></section>
-    <div className="ui-grid"><section className="ui-panel"><div className="ui-panel-head"><div><h2>模型分布</h2><p className="ui-muted">按模型响应的用量汇总</p></div></div>{value.models.length ? <table className="ui-table"><thead><tr><th>模型</th><th>调用</th><th>Token</th></tr></thead><tbody>{value.models.slice(0, 6).map((item) => <tr key={`${item.provider}-${item.model}`}><td>{item.model}</td><td>{item.calls}</td><td>{integer.format(item.total)}</td></tr>)}</tbody></table> : <div className="ui-empty">这个时段没有模型调用。</div>}</section>
-      <section className="ui-panel"><div className="ui-panel-head"><div><h2>技能调用</h2><p className="ui-muted">自动与显式调用均包含</p></div></div>{value.skills.length ? <table className="ui-table"><thead><tr><th>技能</th><th>调用</th><th>成功率</th></tr></thead><tbody>{value.skills.slice(0, 6).map((item) => { const settled = item.success + item.failure; const rate = settled ? Math.round(item.success / settled * 100) : 0; return <tr key={item.name}><td>{item.name}</td><td>{item.calls}</td><td>{settled ? `${rate}%` : '未完成'}</td></tr> })}</tbody></table> : <div className="ui-empty">这个时段没有技能调用。</div>}</section></div>
-    <p className="ui-muted" style={{ marginTop: 13 }}>覆盖率 {value.coverage.percent}% · 已知 {value.coverage.knownAttempts} 次 · 缺少用量 {value.coverage.unknownAttempts} 次{value.coverage.missingParents ? ` · 缺少父会话 ${value.coverage.missingParents} 个` : ''}</p>
+  return <main className="dshi-page">
+    <div className="dshi-top"><div><h1>个人分析</h1><p className="dshi-muted">本机 DSH 活动 · 仅统计可验证的 Token 用量</p></div><div className="dshi-profile" aria-label="个人分析">◒</div></div>
+    <div className="dshi-toolbar"><div className="dshi-ranges">{(Object.keys(rangeLabels) as UsageRange[]).map((key) => <button key={key} aria-pressed={range === key} onClick={() => setRange(key)}>{rangeLabels[key]}</button>)}</div><button className="dshi-rebuild" disabled={rebuilding} onClick={() => void rebuild()}>{rebuilding ? '正在重建…' : '重建统计缓存'}</button></div>
+    {error && <p className="dshi-muted">{error}</p>}
+    <section className="dshi-cards">{card(integer.format(value.totals.total), '总 Token')}{card(exact.format(value.totals.modelCalls), '模型调用')}{card(exact.format(value.totals.skillCalls), '技能调用')}{card(exact.format(value.totals.activeDays), '活跃天数')}</section>
+    <section className="dshi-panel"><div className="dshi-panel-head"><div><h2>Token 使用热力图</h2><p className="dshi-muted">按本机时区 {value.timeZone} 归类</p></div><span className="dshi-status">{status}</span></div><Heatmap cells={value.heatmap} range={range} /><div className="dshi-breakdown"><div><span>输入</span><b>{integer.format(value.totals.input)}</b></div><div><span>输出</span><b>{integer.format(value.totals.output)}</b></div><div><span>缓存读取</span><b>{integer.format(value.totals.cacheRead)}</b></div><div><span>缓存写入</span><b>{integer.format(value.totals.cacheWrite)}</b></div><div><span>推理（输出子集）</span><b>{integer.format(value.totals.reasoning)}</b></div></div></section>
+    <div className="dshi-grid"><section className="dshi-panel"><div className="dshi-panel-head"><div><h2>模型分布</h2><p className="dshi-muted">按模型响应的用量汇总</p></div></div>{value.models.length ? <table className="dshi-table"><thead><tr><th>模型</th><th>调用</th><th>Token</th></tr></thead><tbody>{value.models.slice(0, 6).map((item) => <tr key={`${item.provider}-${item.model}`}><td>{item.model}</td><td>{item.calls}</td><td>{integer.format(item.total)}</td></tr>)}</tbody></table> : <div className="dshi-empty">这个时段没有模型调用。</div>}</section>
+      <section className="dshi-panel"><div className="dshi-panel-head"><div><h2>技能调用</h2><p className="dshi-muted">自动与显式调用均包含</p></div></div>{value.skills.length ? <table className="dshi-table"><thead><tr><th>技能</th><th>调用</th><th>成功率</th></tr></thead><tbody>{value.skills.slice(0, 6).map((item) => { const settled = item.success + item.failure; const rate = settled ? Math.round(item.success / settled * 100) : 0; return <tr key={item.name}><td>{item.name}</td><td>{item.calls}</td><td>{settled ? `${rate}%` : '未完成'}</td></tr> })}</tbody></table> : <div className="dshi-empty">这个时段没有技能调用。</div>}</section></div>
+    <p className="dshi-muted" style={{ marginTop: 13 }}>覆盖率 {value.coverage.percent}% · 已知 {value.coverage.knownAttempts} 次 · 缺少用量 {value.coverage.unknownAttempts} 次{value.coverage.missingParents ? ` · 缺少父会话 ${value.coverage.missingParents} 个` : ''}</p>
   </main>
 }

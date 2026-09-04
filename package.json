@@ -1,9 +1,18 @@
 {
   "name": "dsh-usage-insights",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Local-first personal usage insights for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
+  "author": "lawyer_cui",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/3361805598-gif/dsh-usage-insights"
+  },
+  "homepage": "https://github.com/3361805598-gif/dsh-usage-insights",
+  "bugs": {
+    "url": "https://github.com/3361805598-gif/dsh-usage-insights/issues"
+  },
   "main": "./lib/index.mjs",
   "types": "./lib/types/index.d.ts",
   "exports": {
@@ -12,14 +21,16 @@
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"
   },
-  "files": ["lib/", "cordis.patch.yml", "README.md", "LICENSE"],
+  "files": ["lib/", "cordis.patch.yml", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "build": "tsdown --config tsdown.config.ts && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "pack": "mkdir -p dist && npm pack --pack-destination dist",
+    "clean": "node -e \"const fs=require('fs'); for (const f of fs.readdirSync('.')) { if (f.endsWith('.tgz')) fs.unlinkSync(f) }\""
   },
-  "keywords": ["dsh", "dsh-plugin", "analytics", "token-usage", "local-first"],
+  "keywords": ["dsh", "dsh-plugin", "analytics", "token-usage", "local-first", "deepseek-harness"],
   "engines": { "node": ">=20" },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
