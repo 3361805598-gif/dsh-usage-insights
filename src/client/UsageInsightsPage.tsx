@@ -49,7 +49,7 @@ export function UsageInsightsPage(): JSX.Element {
   if (error && !data) return <main className="dshi-page"><section className="dshi-panel dshi-error"><h2>无法载入个人分析</h2><p>{error}</p><button className="dshi-rebuild" onClick={() => void load()}>重试</button></section></main>
   const value = data!
   return <main className="dshi-page">
-    <div className="dshi-top"><div><h1>个人分析</h1><p className="dshi-muted">本机 DSH 活动 · 仅统计可验证的 Token 用量</p></div><div className="dshi-profile" aria-label="个人分析">◒</div></div>
+    <div className="dshi-top"><div><h1>个人分析</h1><p className="dshi-muted">本机 DSH 活动 · 仅统计可验证的 Token 用量</p></div></div>
     <div className="dshi-toolbar"><div className="dshi-ranges">{(Object.keys(rangeLabels) as UsageRange[]).map((key) => <button key={key} aria-pressed={range === key} onClick={() => setRange(key)}>{rangeLabels[key]}</button>)}</div><button className="dshi-rebuild" disabled={rebuilding} onClick={() => void rebuild()}>{rebuilding ? '正在重建…' : '重建统计缓存'}</button></div>
     {error && <p className="dshi-muted">{error}</p>}
     <section className="dshi-cards">{card(integer.format(value.totals.total), '总 Token')}{card(exact.format(value.totals.modelCalls), '模型调用')}{card(exact.format(value.totals.skillCalls), '技能调用')}{card(exact.format(value.totals.activeDays), '活跃天数')}</section>
