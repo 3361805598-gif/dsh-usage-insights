@@ -65,4 +65,19 @@ describe('buildSummary', () => {
     expect(summary.coverage).toMatchObject({ knownAttempts: 1, unknownAttempts: 1, percent: 50 })
     expect(summary.heatmap).toHaveLength(24)
   })
+
+  it('builds a 30-day calendar with a 24-hour micro heatmap for every date', () => {
+    const record = reduceSession(header, [
+      event(1, 'assistant/message', { turn: 'a', step: 'a', usage: { inputTokens: 2, outputTokens: 3 } }, Date.UTC(2026, 8, 3, 16, 30)),
+    ], 'r1', at)
+    const summary = buildSummary([record], {
+      range: '30d', timeZone: 'Asia/Shanghai', now: Date.UTC(2026, 8, 4, 2),
+      index: { state: 'ready', processedSessions: 1, totalSessions: 1, failures: 0 },
+    })
+    expect(summary.calendar).toHaveLength(30)
+    const day = summary.calendar?.find((item) => item.day === '2026-09-04')
+    expect(day).toMatchObject({ total: 5, attempts: 1 })
+    expect(day?.hours).toHaveLength(24)
+    expect(day?.hours[0]).toMatchObject({ hour: 0, total: 5, attempts: 1 })
+  })
 })

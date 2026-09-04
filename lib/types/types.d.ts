@@ -42,6 +42,19 @@ export interface HeatmapCell extends TokenBreakdown {
     attempts: number;
     unknownAttempts: number;
 }
+/** One day in the 30-day calendar, with a privacy-safe hourly micro heatmap. */
+export interface CalendarDay extends TokenBreakdown {
+    day: string;
+    label: string;
+    attempts: number;
+    unknownAttempts: number;
+    hours: Array<{
+        hour: number;
+        total: number;
+        attempts: number;
+        unknownAttempts: number;
+    }>;
+}
 export interface ModelUsage extends TokenBreakdown {
     provider: string;
     model: string;
@@ -74,6 +87,7 @@ export interface UsageSummaryV1 {
         activeDays: number;
     };
     heatmap: HeatmapCell[];
+    calendar?: CalendarDay[] | undefined;
     models: ModelUsage[];
     skills: SkillUsage[];
     coverage: {

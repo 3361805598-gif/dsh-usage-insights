@@ -1,5 +1,5 @@
 import { addTokens, emptyTokens } from './reducer.js'
-import type { HeatmapCell, ModelUsage, SessionUsageRecord, SkillUsage, TokenBreakdown, UsageFact, UsageRange, UsageSummaryV1 } from '../types.js'
+import type { CalendarDay, HeatmapCell, ModelUsage, SessionUsageRecord, SkillUsage, TokenBreakdown, UsageFact, UsageRange, UsageSummaryV1 } from '../types.js'
 
 const rangeDays: Record<UsageRange, number> = { '1d': 1, '7d': 7, '30d': 30 }
 
@@ -31,6 +31,13 @@ function heatmapKey(range: UsageRange, day: string, hour: number): string {
   return range === '7d' ? `${day}-${hour}` : day
 }
 
+function calendarShell(days: string[]): CalendarDay[] {
+  return days.map((day) => ({
+    day, label: day.slice(5), attempts: 0, unknownAttempts: 0, ...emptyTokens(),
+    hours: Array.from({ length: 24 }, (_, hour) => ({ hour, total: 0, attempts: 0, unknownAttempts: 0 })),
+  }))
+}
+
 function upsertModel(map: Map<string, ModelUsage>, item: UsageFact): void {
   const key = `${item.provider}\u0000${item.model}`
   const target = map.get(key) ?? { provider: item.provider, model: item.model, calls: 0, ...emptyTokens() }
@@ -47,6 +54,8 @@ export function buildSummary(records: Iterable<SessionUsageRecord>, options: {
   const selected = new Set(days)
   const heatmap = heatmapShell(options.range, days)
   const heatmapByKey = new Map(heatmap.map((cell) => [cell.key, cell]))
+  const calendar = options.range === '30d' ? calendarShell(days) : undefined
+  const calendarByDay = new Map(calendar?.map((day) => [day.day, day]))
   const totals = { ...emptyTokens(), modelCalls: 0, skillCalls: 0, activeDays: 0 }
   const modelMap = new Map<string, ModelUsage>()
   const skillMap = new Map<string, SkillUsage>()
@@ -67,6 +76,18 @@ export function buildSummary(records: Iterable<SessionUsageRecord>, options: {
       if (item.known) knownAttempts += 1; else unknownAttempts += 1
       const cell = heatmapByKey.get(heatmapKey(options.range, day, hour))
       if (cell) { cell.attempts += 1; if (!item.known) cell.unknownAttempts += 1; addTokens(cell, item) }
+      const calendarDay = calendarByDay.get(day)
+      if (calendarDay) {
+        calendarDay.attempts += 1
+        if (!item.known) calendarDay.unknownAttempts += 1
+        addTokens(calendarDay, item)
+        const calendarHour = calendarDay.hours[hour]
+        if (calendarHour) {
+          calendarHour.attempts += 1
+          if (!item.known) calendarHour.unknownAttempts += 1
+          calendarHour.total += item.total
+        }
+      }
     }
     for (const item of record.skills) {
       if (!selected.has(localParts(item.at, options.timeZone).day)) continue
@@ -81,7 +102,7 @@ export function buildSummary(records: Iterable<SessionUsageRecord>, options: {
   const denominator = knownAttempts + unknownAttempts
   return {
     schemaVersion: 1, range: options.range, timeZone: options.timeZone, generatedAt: now, index: options.index,
-    totals, heatmap,
+    totals, heatmap, ...(calendar ? { calendar } : {}),
     models: [...modelMap.values()].sort((a, b) => b.total - a.total),
     skills: [...skillMap.values()].sort((a, b) => b.calls - a.calls),
     coverage: { percent: denominator ? Math.round((knownAttempts / denominator) * 100) : 100, knownAttempts, unknownAttempts, unreadableSessions: options.unreadableSessions ?? 0, missingParents },
