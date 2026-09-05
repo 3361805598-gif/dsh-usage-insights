@@ -27,6 +27,8 @@ export interface SkillFact {
 }
 
 export interface SessionUsageRecord {
+  /** Missing on caches produced before accounting fixes. */
+  reducerVersion?: number | undefined
   schemaVersion: 1
   sessionId: string
   sourceCreatedAt: number

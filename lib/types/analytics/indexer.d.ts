@@ -29,11 +29,17 @@ export declare class UsageInsightsIndex {
     private records;
     private index;
     private domainClose?;
-    private running;
+    private queue;
+    private refreshPending;
+    private rebuildPending;
+    private disposed;
     constructor(ctx: HostContext);
     start(): Promise<void>;
     summary(range: UsageRange, timeZone: string): UsageSummaryV1;
     rebuild(): Promise<void>;
+    private enqueue;
+    private refresh;
+    private prune;
     private installLiveReducer;
     private syncLive;
     private backfill;

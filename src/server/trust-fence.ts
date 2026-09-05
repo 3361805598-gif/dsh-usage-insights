@@ -6,6 +6,7 @@ function one(headers: IncomingHttpHeaders, name: string): string | undefined {
 }
 
 function authority(value: string): URL | undefined {
+  if (!value || /[\s/@?#\\]/.test(value)) return undefined
   try { return new URL(`http://${value}`) } catch { return undefined }
 }
 
@@ -26,8 +27,14 @@ export function isTrustedRequest(request: { headers: IncomingHttpHeaders }, trus
     return allowed && (allowed.port === '' ? allowed.hostname === hostUrl.hostname : allowed.host === hostUrl.host)
   })
   if (!loopback(hostUrl.hostname) && !trusted) return false
+  if (Array.isArray(request.headers.origin) || Array.isArray(request.headers['sec-fetch-site'])) return false
   if (one(request.headers, 'sec-fetch-site') === 'cross-site') return false
   const origin = one(request.headers, 'origin')
   if (!origin) return true
-  try { return new URL(origin).host === hostUrl.host } catch { return false }
+  try {
+    const source = new URL(origin)
+    return (source.protocol === 'http:' || source.protocol === 'https:')
+      && !source.username && !source.password && source.pathname === '/' && !source.search && !source.hash
+      && source.host === hostUrl.host
+  } catch { return false }
 }

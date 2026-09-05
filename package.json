@@ -1,6 +1,6 @@
 {
   "name": "dsh-usage-insights",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Local-first personal usage insights for DeepSeek Harness",
   "type": "module",
   "license": "MIT",
@@ -24,10 +24,12 @@
   "files": ["lib/", "cordis.patch.yml", "README.md", "LICENSE", "CHANGELOG.md"],
   "scripts": {
     "build": "tsdown --config tsdown.config.ts && tsc -p tsconfig.build.json",
+    "preview:ui": "node scripts/preview.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test && npm run build",
-    "pack": "mkdir -p dist && npm pack --pack-destination dist",
+    "prepack": "npm run check",
+    "pack": "mkdir -p dist && npm pack --ignore-scripts --pack-destination dist",
     "clean": "node -e \"const fs=require('fs'); for (const f of fs.readdirSync('.')) { if (f.endsWith('.tgz')) fs.unlinkSync(f) }\""
   },
   "keywords": ["dsh", "dsh-plugin", "analytics", "token-usage", "local-first", "deepseek-harness"],

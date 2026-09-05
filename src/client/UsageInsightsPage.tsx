@@ -1,88 +1,62 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { getSummary, rebuildIndex } from './api.js'
+import { useEffect, useState } from 'react'
+import { ActivityChart } from './components/ActivityChart.js'
+import { TokenComposition } from './components/TokenComposition.js'
+import { UsageDetails } from './components/UsageDetails.js'
+import { compact, exact, rangeDays, rangeLabels } from './format.js'
 import { ensureUsageInsightsStyles } from './styles.js'
-import type { CalendarDay, HeatmapCell, UsageRange, UsageSummaryV1 } from '../types.js'
+import { useUsageInsights } from './useUsageInsights.js'
+import type { UsageRange, UsageSummaryV1 } from '../types.js'
 
-const integer = new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 })
-const exact = new Intl.NumberFormat('zh-CN')
-const rangeLabels: Record<UsageRange, string> = { '1d': '1 天', '7d': '7 天', '30d': '30 天' }
-
-function heatLevel(total: number, max: number): 0 | 1 | 2 | 3 | 4 {
-  if (!total || !max) return 0
-  const ratio = total / max
-  return ratio < .18 ? 1 : ratio < .42 ? 2 : ratio < .7 ? 3 : 4
+export interface UsageInsightsViewProps {
+  range: UsageRange
+  data: UsageSummaryV1 | undefined
+  error?: string | undefined
+  loading: boolean
+  rebuilding: boolean
+  onRangeChange(range: UsageRange): void
+  onReload(): void
+  onRebuild(): void
 }
 
-function Heatmap({ cells, range }: { cells: HeatmapCell[]; range: Exclude<UsageRange, '30d'> }): JSX.Element {
-  const max = Math.max(...cells.map((cell) => cell.total), 0)
-  return <>
-    <div className={`dshi-heat ${range === '1d' ? 'one' : 'seven'}`}>
-      {cells.map((cell) => <div key={cell.key} className={`dshi-cell l${heatLevel(cell.total, max)}`} title={`${cell.label}：${exact.format(cell.total)} Token${cell.unknownAttempts ? `；${cell.unknownAttempts} 次缺少用量` : ''}`} />)}
-    </div>
-    <div className="dshi-legend"><span>少</span><i className="dshi-swatch" /><i className="dshi-swatch" /><i className="dshi-swatch" /><i className="dshi-swatch" /><span>多</span></div>
-  </>
+function SyncStatus({ data, rebuilding }: Pick<UsageInsightsViewProps, 'data' | 'rebuilding'>): JSX.Element {
+  const state = rebuilding ? 'indexing' : data?.index.state
+  const label = state === 'ready' ? '已同步' : state === 'indexing' ? '正在同步'
+    : state === 'partial' ? '部分数据未同步' : state === 'error' ? '同步失败' : '准备数据中'
+  return <span className={`dshi-sync ${state ?? 'indexing'}`} role="status"><i />{label}</span>
 }
 
-const weekdays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-
-function mondayOffset(day: string): number {
-  return (new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7
+/** Pure page surface, shared by the host and the local fixture preview. */
+export function UsageInsightsView({ range, data, error, loading, rebuilding, onRangeChange, onReload, onRebuild }: UsageInsightsViewProps): JSX.Element {
+  const busy = rebuilding || data?.index.state === 'indexing'
+  const hasAttempts = Boolean(data && data.coverage.knownAttempts + data.coverage.unknownAttempts)
+  return <main className="dshi-page">
+    <header className="dshi-top"><div><div className="dshi-title-row"><span className="dshi-brand-mark" aria-hidden="true"><i /><i /><i /></span><h1>个人分析</h1></div><p>本机使用记录 · 按自然日统计</p></div><SyncStatus data={data} rebuilding={rebuilding} /></header>
+    <div className="dshi-toolbar"><div className="dshi-segmented" role="group" aria-label="统计时间范围">{(Object.keys(rangeLabels) as UsageRange[]).map((key) => <button type="button" key={key} aria-pressed={range === key} onClick={() => onRangeChange(key)}>{rangeLabels[key]}</button>)}</div>
+      <button type="button" className="dshi-button" disabled={busy} onClick={onRebuild}><span aria-hidden="true">↻</span>{busy ? '同步中…' : '重建统计缓存'}</button></div>
+    {error && <div className="dshi-notice is-error" role="alert"><div><strong>{data ? '刷新未成功，当前显示上次数据' : '暂时无法读取分析数据'}</strong><p>{error}</p></div><button type="button" className="dshi-button" onClick={onReload} disabled={loading}>重新加载</button></div>}
+    {data?.index.state === 'indexing' && <div className="dshi-notice" role="status"><span>正在整理本机会话，统计会逐步更新。</span><span>{data.index.processedSessions} / {data.index.totalSessions}</span></div>}
+    {data?.index.state === 'error' && <div className="dshi-notice is-error" role="alert">统计同步失败，当前数据可能不完整。请尝试重建统计缓存。</div>}
+    {!data ? <div className="dshi-loading" aria-busy={loading} role="status"><span className="dshi-loading-mark" aria-hidden="true">▥</span><strong>{error ? '等待重新连接' : '正在整理你的使用记录'}</strong><p>{error ? '可以重新加载，也可以切换时间范围。' : '统计在本机完成，请稍候。'}</p></div> : <>
+      <section className="dshi-overview" aria-label="使用总览"><div className="dshi-total"><span className="dshi-eyebrow">{rangeLabels[range]}总 Token</span><strong title={exact.format(data.totals.total)}>{compact.format(data.totals.total)}</strong><span className="dshi-caption">{exact.format(data.totals.total)} Token · 推理用量不重复累加</span></div>
+        <div className="dshi-metrics"><div><span>模型调用</span><strong>{exact.format(data.totals.modelCalls)}<small>次</small></strong></div><div><span>技能调用</span><strong>{exact.format(data.totals.skillCalls)}<small>次</small></strong></div><div><span>活跃天数</span><strong>{data.totals.activeDays}<small>/ {rangeDays[range]} 天</small></strong></div></div>
+      </section>
+      <div className="dshi-analysis-grid"><ActivityChart key={range} data={data} /><TokenComposition tokens={data.totals} /></div>
+      <UsageDetails key={range} data={data} />
+      <section className="dshi-coverage" aria-label="数据完整性"><div className="dshi-coverage-summary"><span className="dshi-coverage-label">用量覆盖率</span><strong>{hasAttempts ? `${data.coverage.percent}%` : '—'}</strong><div className="dshi-coverage-track" aria-hidden="true"><i style={{ width: `${hasAttempts ? data.coverage.percent : 0}%` }} /></div></div>
+        <div className="dshi-coverage-copy"><p>{hasAttempts ? `已知用量 ${data.coverage.knownAttempts} 次 · 缺少用量 ${data.coverage.unknownAttempts} 次` : '暂无模型响应，覆盖率暂不计算。'}</p>
+          {(data.coverage.unreadableSessions > 0 || data.coverage.missingParents > 0 || data.index.state === 'partial') && <p className="dshi-failure">{data.coverage.unreadableSessions > 0 ? `${data.coverage.unreadableSessions} 个会话无法读取。` : ''}{data.coverage.missingParents > 0 ? `${data.coverage.missingParents} 个父会话缺失。` : ''}{data.index.state === 'partial' && !data.coverage.unreadableSessions ? '部分会话尚未同步，后台将自动重试。' : ''}</p>}</div>
+      </section>
+      <footer className="dshi-footer"><span>仅保存在本机 · 不记录对话内容</span><span>{loading ? '正在刷新…' : `更新于 ${new Date(data.generatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`}</span></footer>
+    </>}
+  </main>
 }
-
-function MonthlyCalendar({ days }: { days: CalendarDay[] }): JSX.Element {
-  const maxDay = Math.max(...days.map((day) => day.total), 0)
-  const maxHour = Math.max(...days.flatMap((day) => day.hours.map((hour) => hour.total)), 0)
-  const leading = days[0] ? mondayOffset(days[0].day) : 0
-  const cells: Array<CalendarDay | undefined> = [...Array<CalendarDay | undefined>(leading).fill(undefined), ...days]
-  while (cells.length % 7 !== 0) cells.push(undefined)
-  return <div className="dshi-calendar" aria-label="最近 30 天 Token 使用日历">
-    <div className="dshi-calendar-weekdays">{weekdays.map((label) => <span key={label}>{label}</span>)}</div>
-    <div className="dshi-calendar-grid">
-      {cells.map((day, index) => day === undefined
-        ? <div key={`empty-${index}`} className="dshi-calendar-empty" aria-hidden="true" />
-        : <div key={day.day} className={`dshi-calendar-day l${heatLevel(day.total, maxDay)}`} title={`${day.day}：${exact.format(day.total)} Token${day.unknownAttempts ? `；${day.unknownAttempts} 次缺少用量` : ''}`}>
-          <div className="dshi-calendar-dayhead"><span>{day.label}</span><b>{integer.format(day.total)}</b></div>
-          <div className="dshi-calendar-hours" aria-label={`${day.label} 的 24 小时使用热力图`}>
-            {day.hours.map((hour) => <i key={hour.hour} className={`l${heatLevel(hour.total, maxHour)}`} title={`${String(hour.hour).padStart(2, '0')}:00：${exact.format(hour.total)} Token`} />)}
-          </div>
-        </div>) }
-    </div>
-  </div>
-}
-
-function card(value: string, label: string): JSX.Element { return <div className="dshi-card"><span>{label}</span><b>{value}</b></div> }
 
 export function UsageInsightsPage(): JSX.Element {
-  ensureUsageInsightsStyles()
+  useEffect(() => { ensureUsageInsightsStyles() }, [])
   const [range, setRange] = useState<UsageRange>('7d')
-  const [data, setData] = useState<UsageSummaryV1>()
-  const [error, setError] = useState<string>()
-  const [rebuilding, setRebuilding] = useState(false)
-  const load = useCallback(async () => {
-    try { setError(undefined); setData(await getSummary(range)) } catch (cause) { setError(cause instanceof Error ? cause.message : '无法读取分析数据') }
-  }, [range])
-  useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 10_000); return () => window.clearInterval(timer) }, [load])
-  const status = useMemo(() => {
-    if (data?.index.state === 'ready') return '已同步'
-    if (data?.index.state === 'indexing') return `正在索引 ${data.index.processedSessions}/${data.index.totalSessions}`
-    if (data?.index.state === 'partial') return `部分会话无法读取（${data.index.failures} 个）`
-    return '索引失败，请重建缓存后重试'
-  }, [data])
-  const rebuild = async () => {
-    if (!window.confirm('将删除本插件的派生统计缓存，并从原始 DSH 会话重新索引。不会删除任何会话。是否继续？')) return
-    setRebuilding(true); try { await rebuildIndex(); await load() } catch (cause) { setError(cause instanceof Error ? cause.message : '无法启动重建') } finally { setRebuilding(false) }
+  const state = useUsageInsights(range)
+  const rebuild = () => {
+    if (window.confirm('重新计算本插件的统计缓存，不会删除原始会话。是否继续？')) void state.rebuild()
   }
-  if (!data && !error) return <main className="dshi-page"><div className="dshi-loading">正在准备本地使用分析…</div></main>
-  if (error && !data) return <main className="dshi-page"><section className="dshi-panel dshi-error"><h2>无法载入个人分析</h2><p>{error}</p><button className="dshi-rebuild" onClick={() => void load()}>重试</button></section></main>
-  const value = data!
-  return <main className="dshi-page">
-    <div className="dshi-top"><div><h1>个人分析</h1><p className="dshi-muted">本机 DSH 活动 · 仅统计可验证的 Token 用量</p></div></div>
-    <div className="dshi-toolbar"><div className="dshi-ranges">{(Object.keys(rangeLabels) as UsageRange[]).map((key) => <button key={key} aria-pressed={range === key} onClick={() => setRange(key)}>{rangeLabels[key]}</button>)}</div><button className="dshi-rebuild" disabled={rebuilding} onClick={() => void rebuild()}>{rebuilding ? '正在重建…' : '重建统计缓存'}</button></div>
-    {error && <p className="dshi-muted">{error}</p>}
-    <section className="dshi-cards">{card(integer.format(value.totals.total), '总 Token')}{card(exact.format(value.totals.modelCalls), '模型调用')}{card(exact.format(value.totals.skillCalls), '技能调用')}{card(exact.format(value.totals.activeDays), '活跃天数')}</section>
-    <section className="dshi-panel"><div className="dshi-panel-head"><div><h2>{range === '30d' ? '30 天使用日历' : 'Token 使用热力图'}</h2><p className="dshi-muted">按本机时区 {value.timeZone} 归类{range === '30d' ? ' · 每日内含 24 小时微热力图' : ''}</p></div><span className="dshi-status">{status}</span></div>{range === '30d' && value.calendar ? <MonthlyCalendar days={value.calendar} /> : <Heatmap cells={value.heatmap} range={range as Exclude<UsageRange, '30d'>} />}<div className="dshi-breakdown"><div><span>输入</span><b>{integer.format(value.totals.input)}</b></div><div><span>输出</span><b>{integer.format(value.totals.output)}</b></div><div><span>缓存读取</span><b>{integer.format(value.totals.cacheRead)}</b></div><div><span>缓存写入</span><b>{integer.format(value.totals.cacheWrite)}</b></div><div><span>推理（输出子集）</span><b>{integer.format(value.totals.reasoning)}</b></div></div></section>
-    <div className="dshi-grid"><section className="dshi-panel"><div className="dshi-panel-head"><div><h2>模型分布</h2><p className="dshi-muted">按模型响应的用量汇总</p></div></div>{value.models.length ? <table className="dshi-table"><thead><tr><th>模型</th><th>调用</th><th>Token</th></tr></thead><tbody>{value.models.slice(0, 6).map((item) => <tr key={`${item.provider}-${item.model}`}><td>{item.model}</td><td>{item.calls}</td><td>{integer.format(item.total)}</td></tr>)}</tbody></table> : <div className="dshi-empty">这个时段没有模型调用。</div>}</section>
-      <section className="dshi-panel"><div className="dshi-panel-head"><div><h2>技能调用</h2><p className="dshi-muted">自动与显式调用均包含</p></div></div>{value.skills.length ? <table className="dshi-table"><thead><tr><th>技能</th><th>调用</th><th>成功率</th></tr></thead><tbody>{value.skills.slice(0, 6).map((item) => { const settled = item.success + item.failure; const rate = settled ? Math.round(item.success / settled * 100) : 0; return <tr key={item.name}><td>{item.name}</td><td>{item.calls}</td><td>{settled ? `${rate}%` : '未完成'}</td></tr> })}</tbody></table> : <div className="dshi-empty">这个时段没有技能调用。</div>}</section></div>
-    <p className="dshi-muted" style={{ marginTop: 13 }}>覆盖率 {value.coverage.percent}% · 已知 {value.coverage.knownAttempts} 次 · 缺少用量 {value.coverage.unknownAttempts} 次{value.coverage.missingParents ? ` · 缺少父会话 ${value.coverage.missingParents} 个` : ''}</p>
-  </main>
+  return <UsageInsightsView range={range} {...state} onRangeChange={setRange} onReload={state.reload} onRebuild={rebuild} />
 }

@@ -1,5 +1,7 @@
 import type { SessionEventLike, SessionHeaderLike, SessionUsageRecord, SkillFact, TokenBreakdown, UsageFact } from '../types.js'
 
+export const REDUCER_VERSION = 2
+
 const emptyTokens = (): TokenBreakdown => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 })
 
 function numberOf(value: unknown): number {
@@ -10,7 +12,7 @@ function usageFrom(value: unknown): TokenBreakdown | undefined {
   if (!value || typeof value !== 'object') return undefined
   const raw = value as Record<string, unknown>
   const seen = ['inputTokens', 'outputTokens', 'cacheReadTokens', 'cacheWriteTokens', 'reasoningTokens']
-    .some((key) => typeof raw[key] === 'number')
+    .some((key) => typeof raw[key] === 'number' && Number.isFinite(raw[key]) && raw[key] >= 0)
   if (!seen) return undefined
   const input = numberOf(raw.inputTokens)
   const output = numberOf(raw.outputTokens)
@@ -85,7 +87,7 @@ export function reduceSession(header: SessionHeaderLike, events: SessionEventLik
         const raw = chunk as Record<string, unknown>
         const reported = usageFrom(raw.usage)
         if (reported) attempt.usage = reported
-        if (raw.finish) {
+        if (raw.finish && !attempt.terminal) {
           attempt.terminal = true
           const token = attempt.usage ?? emptyTokens()
           usage.push({ at: event.time, provider: attempt.provider, model: attempt.model, known: Boolean(attempt.usage), ...token })
@@ -101,13 +103,14 @@ export function reduceSession(header: SessionHeaderLike, events: SessionEventLik
       if (!attempt?.terminal) {
         const message = data.message
         const rawMessage = message && typeof message === 'object' ? message as Record<string, unknown> : {}
-        const token = usageFrom(data.usage) ?? usageFrom(rawMessage.usage) ?? emptyTokens()
+        const reported = usageFrom(data.usage) ?? usageFrom(rawMessage.usage) ?? attempt?.usage
+        const token = reported ?? emptyTokens()
         const source = rawMessage.source && typeof rawMessage.source === 'object' ? rawMessage.source as Record<string, unknown> : {}
         usage.push({
           at: event.time,
           provider: typeof source.provider === 'string' ? source.provider : currentModel.provider,
           model: typeof source.model === 'string' ? source.model : currentModel.model,
-          known: token.total > 0 || token.reasoning > 0,
+          known: Boolean(reported),
           ...token,
         })
       }
@@ -130,7 +133,7 @@ export function reduceSession(header: SessionHeaderLike, events: SessionEventLik
     }
 
     if (event.type === 'user/message') {
-      const message = data.message
+      const message = data.message ?? data
       const source = message && typeof message === 'object' ? (message as Record<string, unknown>).source : undefined
       if (source && typeof source === 'object' && (source as Record<string, unknown>).kind === 'skill-invocation') {
         const name = (source as Record<string, unknown>).name
@@ -152,7 +155,7 @@ export function reduceSession(header: SessionHeaderLike, events: SessionEventLik
   for (const call of pendingSkills.values()) skills.push({ at: call.at, name: call.name, origin: 'automatic', status: 'incomplete' })
   const cutoff = now - 90 * 24 * 60 * 60 * 1000
   return {
-    schemaVersion: 1, sessionId: header.id, sourceCreatedAt: header.createdAt, sourceRevision: revision,
+    schemaVersion: 1, reducerVersion: REDUCER_VERSION, sessionId: header.id, sourceCreatedAt: header.createdAt, sourceRevision: revision,
     ...(header.parentSession ? { parentSession: header.parentSession } : {}),
     origin: header.origin === 'subagent' ? 'subagent' : 'root', updatedAt: now,
     usage: usage.filter((item) => item.at >= cutoff), skills: skills.filter((item) => item.at >= cutoff),

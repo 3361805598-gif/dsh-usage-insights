@@ -81,3 +81,68 @@ describe('buildSummary', () => {
     expect(day?.hours[0]).toMatchObject({ hour: 0, total: 5, attempts: 1 })
   })
 })
+
+describe('usage accounting regressions', () => {
+  it('treats reported zero as known and invalid numeric usage as unknown', () => {
+    const record = reduceSession(header, [
+      event(1, 'assistant/message', { usage: { inputTokens: 0, outputTokens: 0 } }),
+      event(2, 'assistant/message', { usage: { inputTokens: NaN, outputTokens: -1 } }),
+    ], 'r1', at)
+    expect(record.usage.map((item) => item.known)).toEqual([true, false])
+  })
+
+  it('counts repeated terminal chunks once', () => {
+    const record = reduceSession(header, [
+      event(1, 'assistant/chunk', { turn: 1, step: 1, chunk: { usage: { inputTokens: 3 }, finish: { reason: 'stop' } } }),
+      event(2, 'assistant/chunk', { turn: 1, step: 1, chunk: { finish: { reason: 'stop' } } }),
+    ], 'r1', at)
+    expect(record.usage).toHaveLength(1)
+    expect(record.usage[0]?.total).toBe(3)
+  })
+
+  it('preserves usage from an interrupted stream without a terminal chunk', () => {
+    const record = reduceSession(header, [
+      event(1, 'assistant/chunk', { turn: 1, step: 1, chunk: { usage: { inputTokens: 3 } } }),
+      event(2, 'assistant/message', { turn: 1, step: 1, message: {}, interrupted: true }),
+    ], 'r1', at)
+    expect(record.usage[0]).toMatchObject({ known: true, total: 3 })
+  })
+
+  it('reads explicit skill invocations from the native DSH user event', () => {
+    const record = reduceSession(header, [
+      event(1, 'user/message', { source: { kind: 'skill-invocation', name: 'pdf' }, content: [] }),
+    ], 'r1', at)
+    expect(record.skills[0]).toMatchObject({ name: 'pdf', origin: 'explicit' })
+  })
+
+  it('groups repeated daylight-saving hours into the same local hour', () => {
+    const record = reduceSession(header, [
+      event(1, 'assistant/message', { usage: { inputTokens: 2 } }, Date.UTC(2026, 10, 1, 5, 30)),
+      event(2, 'assistant/message', { usage: { inputTokens: 3 } }, Date.UTC(2026, 10, 1, 6, 30)),
+    ], 'r1', Date.UTC(2026, 10, 1, 12))
+    const summary = buildSummary([record], {
+      range: '1d', timeZone: 'America/New_York', now: Date.UTC(2026, 10, 1, 12),
+      index: { state: 'ready', processedSessions: 1, totalSessions: 1, failures: 0 },
+    })
+    expect(summary.heatmap[1]).toMatchObject({ total: 5, attempts: 2 })
+  })
+})
+
+it('constructs one timezone formatter per summary, independent of fact count', () => {
+  const original = Intl.DateTimeFormat
+  let calls = 0
+  Intl.DateTimeFormat = new Proxy(original, {
+    construct(target, args) { calls += 1; return Reflect.construct(target, args) },
+    apply(target, receiver, args) { calls += 1; return Reflect.apply(target, receiver, args) },
+  })
+  try {
+    const record = reduceSession(header, Array.from({ length: 500 }, (_, seq) =>
+      event(seq, 'assistant/message', { usage: { inputTokens: 1 } })), 'r1', at)
+    const summary = buildSummary([record], {
+      range: '7d', timeZone: 'Asia/Shanghai', now: at,
+      index: { state: 'ready', processedSessions: 1, totalSessions: 1, failures: 0 },
+    })
+    expect(summary.totals.total).toBe(500)
+    expect(calls).toBe(1)
+  } finally { Intl.DateTimeFormat = original }
+})

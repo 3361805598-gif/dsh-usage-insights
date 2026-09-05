@@ -3,14 +3,14 @@ import type { CalendarDay, HeatmapCell, ModelUsage, SessionUsageRecord, SkillUsa
 
 const rangeDays: Record<UsageRange, number> = { '1d': 1, '7d': 7, '30d': 30 }
 
-function localParts(at: number, timeZone: string): { day: string; hour: number } {
-  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' }).formatToParts(at)
+function localParts(at: number, formatter: Intl.DateTimeFormat): { day: string; hour: number } {
+  const parts = formatter.formatToParts(at)
   const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '00'
   return { day: `${value('year')}-${value('month')}-${value('day')}`, hour: Number(value('hour')) }
 }
 
-function selectedDays(now: number, timeZone: string, range: UsageRange): string[] {
-  const current = localParts(now, timeZone).day.split('-').map(Number)
+function selectedDays(now: number, formatter: Intl.DateTimeFormat, range: UsageRange): string[] {
+  const current = localParts(now, formatter).day.split('-').map(Number)
   const [year, month, day] = current as [number, number, number]
   const anchor = new Date(Date.UTC(year, month - 1, day))
   return Array.from({ length: rangeDays[range] }, (_, offset) => {
@@ -49,8 +49,8 @@ export function buildSummary(records: Iterable<SessionUsageRecord>, options: {
 }): UsageSummaryV1 {
   const now = options.now ?? Date.now()
   // Throws a deliberate RangeError for invalid IANA zones rather than silently reporting a wrong day.
-  Intl.DateTimeFormat('en-CA', { timeZone: options.timeZone }).format(now)
-  const days = selectedDays(now, options.timeZone, options.range)
+  const formatter = new Intl.DateTimeFormat('en-CA', { timeZone: options.timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23' })
+  const days = selectedDays(now, formatter, options.range)
   const selected = new Set(days)
   const heatmap = heatmapShell(options.range, days)
   const heatmapByKey = new Map(heatmap.map((cell) => [cell.key, cell]))
@@ -70,7 +70,7 @@ export function buildSummary(records: Iterable<SessionUsageRecord>, options: {
   for (const record of materialized) {
     if (record.parentSession && !recordIds.has(record.parentSession)) missingParents += 1
     for (const item of record.usage) {
-      const { day, hour } = localParts(item.at, options.timeZone)
+      const { day, hour } = localParts(item.at, formatter)
       if (!selected.has(day)) continue
       activeDays.add(day); totals.modelCalls += 1; addTokens(totals, item); upsertModel(modelMap, item)
       if (item.known) knownAttempts += 1; else unknownAttempts += 1
@@ -90,7 +90,7 @@ export function buildSummary(records: Iterable<SessionUsageRecord>, options: {
       }
     }
     for (const item of record.skills) {
-      if (!selected.has(localParts(item.at, options.timeZone).day)) continue
+      if (!selected.has(localParts(item.at, formatter).day)) continue
       totals.skillCalls += 1
       const target = skillMap.get(item.name) ?? { name: item.name, calls: 0, automatic: 0, explicit: 0, success: 0, failure: 0, incomplete: 0 }
       target.calls += 1; target[item.origin] += 1; target[item.status] += 1
@@ -101,7 +101,7 @@ export function buildSummary(records: Iterable<SessionUsageRecord>, options: {
   totals.activeDays = activeDays.size
   const denominator = knownAttempts + unknownAttempts
   return {
-    schemaVersion: 1, range: options.range, timeZone: options.timeZone, generatedAt: now, index: options.index,
+    schemaVersion: 1, range: options.range, timeZone: options.timeZone, generatedAt: now, index: { ...options.index },
     totals, heatmap, ...(calendar ? { calendar } : {}),
     models: [...modelMap.values()].sort((a, b) => b.total - a.total),
     skills: [...skillMap.values()].sort((a, b) => b.calls - a.calls),

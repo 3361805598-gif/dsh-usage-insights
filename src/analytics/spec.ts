@@ -10,7 +10,7 @@ const skill = z.object({
   at: z.number(), name: z.string(), origin: z.enum(['automatic', 'explicit']), status: z.enum(['success', 'failure', 'incomplete']), durationMs: z.number().optional(),
 })
 const record = z.object({
-  schemaVersion: z.literal(1), sessionId: z.string(), sourceCreatedAt: z.number(), sourceRevision: z.union([z.string(), z.number()]), parentSession: z.string().optional(),
+  schemaVersion: z.literal(1), reducerVersion: z.number().optional(), sessionId: z.string(), sourceCreatedAt: z.number(), sourceRevision: z.union([z.string(), z.number()]), parentSession: z.string().optional(),
   origin: z.enum(['root', 'subagent']), updatedAt: z.number(), usage: z.array(token), skills: z.array(skill),
 }) satisfies z.ZodType<SessionUsageRecord>
 
