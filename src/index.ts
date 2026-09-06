@@ -5,7 +5,7 @@ import { sendJson } from './server/http.js'
 import { isTrustedRequest } from './server/trust-fence.js'
 import type { UsageRange } from './types.js'
 
-export const name = 'dsh-usage-insights'
+export const name = 'dsh-usage-analytics'
 export const inject = ['webServer', 'webRuntime', 'sessionPersistence', 'sessions', 'storageDomain']
 
 type PluginContext = Context & {
@@ -13,7 +13,7 @@ type PluginContext = Context & {
   webServer: { register(route: { kind: 'prefix'; path: string; handler(req: IncomingMessage, res: ServerResponse): void | Promise<void> }): () => void }
 }
 
-const API_ROOT = '/dsh-usage-insights/api'
+const API_ROOT = '/dsh-usage-analytics/api'
 const ranges = new Set<UsageRange>(['1d', '7d', '30d'])
 
 export async function apply(ctx: PluginContext): Promise<void> {

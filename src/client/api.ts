@@ -1,6 +1,6 @@
 import type { UsageRange, UsageSummaryV1 } from '../types.js'
 
-const root = '/dsh-usage-insights/api'
+const root = '/dsh-usage-analytics/api'
 
 export async function getSummary(range: UsageRange, signal?: AbortSignal): Promise<UsageSummaryV1> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone

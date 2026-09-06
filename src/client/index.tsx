@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { UsageInsightsPage } from './UsageInsightsPage.js'
 import { ensureUsageInsightsStyles, installUsageInsightsNavIcon } from './styles.js'
 
-export const name = 'dsh-usage-insights-client'
+export const name = 'dsh-usage-analytics-client'
 export const inject = ['slots']
 
 export function apply(ctx: Context & { slots: { inject(name: string, callback: () => unknown): unknown; register(options: unknown, component: unknown): unknown } }): void {

@@ -18,7 +18,7 @@ const client: UserConfig = {
   deps: { neverBundle: clientExternals, alwaysBundle: (id: string) => !clientExternals.includes(id), onlyBundle: false },
   outputOptions: {
     entryFileNames: 'client.js',
-    banner: 'window.__ModuleLoader__.load({ id: "dsh-usage-insights", factory: (require) => {',
+    banner: 'window.__ModuleLoader__.load({ id: "dsh-usage-analytics", factory: (require) => {',
     footer: 'return module.exports; } });',
     intro: 'var module = { exports: {} }; var exports = module.exports;', codeSplitting: false,
   },

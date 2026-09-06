@@ -1,17 +1,8 @@
-# dsh-usage-insights
+# dsh-usage-analytics
 
 DeepSeek Harness 的本机个人分析插件：在「设置 → 个人分析」展示 1 天、7 天、30 天 Token 热力图、Token 分类、模型分布和技能调用状态。
 
-当前 `0.2.0` 版本使用 GPT-6 Astra 完成核心架构与前端重构，重点提升统计同步可靠性、页面可读性和异常状态反馈。
-
-## 功能
-
-- 设置页新增「个人分析」分区，按 1 / 7 / 30 天切换统计窗口；
-- 今日小时柱图、7 天小时热力图、30 天可点击日历；日期和小时明细按本机时区归类；
-- Token 构成条与分类占比，推理用量作为输出子集单独说明；
-- 模型分布：显示提供方、调用次数、Token 与用量占比，支持展开完整列表；
-- 技能调用：区分自动 / 显式来源，显示成功、失败、未完成数量及成功率；
-- 「重建统计缓存」只删除本插件的派生索引，再从原始 DSH 会话重新归集。
+`0.2.0` 版本重点重构了核心架构与前端，提升统计同步可靠性、页面可读性和异常状态反馈。
 
 ## 截图
 
@@ -26,6 +17,15 @@ DeepSeek Harness 的本机个人分析插件：在「设置 → 个人分析」�
 **按日明细**：点击日历中的日期查看当天用量明细；色阶按每日总量比较，缺少用量不估算。
 
 ![按日明细](docs/screenshot-day-detail.png)
+
+## 功能
+
+- 设置页新增「个人分析」分区，按 1 / 7 / 30 天切换统计窗口；
+- 今日小时柱图、7 天小时热力图、30 天可点击日历；日期和小时明细按本机时区归类；
+- Token 构成条与分类占比，推理用量作为输出子集单独说明；
+- 模型分布：显示提供方、调用次数、Token 与用量占比，支持展开完整列表；
+- 技能调用：区分自动 / 显式来源，显示成功、失败、未完成数量及成功率；
+- 「重建统计缓存」只删除本插件的派生索引，再从原始 DSH 会话重新归集。
 
 ## 数据边界
 
@@ -42,17 +42,29 @@ DeepSeek Harness 的本机个人分析插件：在「设置 → 个人分析」�
 
 ### 安装已有发布版
 
-已有发布安装包见 [GitHub Releases](https://github.com/3361805598-gif/dsh-usage-insights/releases)。本次 0.2.0 可按下方步骤从源码打包安装。
+从 [GitHub Releases](https://github.com/3361805598-gif/dsh-usage-analytics/releases) 下载对应版本的 `.tgz` 安装包（每个 Release 说明中都附有该包的 SHA-256 校验值）：
+
+```sh
+curl -L -o dsh-usage-analytics-0.2.1.tgz \
+  https://github.com/3361805598-gif/dsh-usage-analytics/releases/download/v0.2.1/dsh-usage-analytics-0.2.1.tgz
+shasum -a 256 dsh-usage-analytics-0.2.1.tgz    # 与 Release 说明中的 SHA-256 比对
+
+mkdir -p ~/.dsh/profiles/web/vendor
+cp dsh-usage-analytics-0.2.1.tgz ~/.dsh/profiles/web/vendor/
+dsh plugin --profile web add file:vendor/dsh-usage-analytics-0.2.1.tgz
+```
+
+安装后重启 `dsh web`，再硬刷新浏览器。
 
 ### 从源码打包
 
 ```sh
 npm install
 npm run check
-npm run pack         # 自动检查、构建，然后产出 dist/dsh-usage-insights-<version>.tgz
+npm run pack         # 自动检查、构建，然后产出 dist/dsh-usage-analytics-<version>.tgz
 
-cp dist/dsh-usage-insights-<version>.tgz ~/.dsh/profiles/web/vendor/
-dsh plugin --profile web add file:vendor/dsh-usage-insights-<version>.tgz
+cp dist/dsh-usage-analytics-<version>.tgz ~/.dsh/profiles/web/vendor/
+dsh plugin --profile web add file:vendor/dsh-usage-analytics-<version>.tgz
 ```
 
 安装后重启 `dsh web`，再硬刷新浏览器。
@@ -84,7 +96,7 @@ npm run preview:ui
 - `components/`：活动图表、Token 构成、模型/技能明细。
 - `format.ts`：数字、比例、时间标签与色阶；`styles.ts`：局部样式和宿主主题适配。
 
-安装到 DSH 时使用包根目录的 `cordis.patch.yml`；客户端包入口为 `dsh-usage-insights/client`。
+安装到 DSH 时使用包根目录的 `cordis.patch.yml`；客户端包入口为 `dsh-usage-analytics/client`。
 
 ## 缓存同步
 
@@ -109,7 +121,7 @@ npm run preview:ui
 ## 卸载
 
 ```sh
-dsh plugin --profile web remove dsh-usage-insights
+dsh plugin --profile web remove dsh-usage-analytics
 ```
 
 然后重启 `dsh web`。
